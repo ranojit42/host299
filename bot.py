@@ -1,7 +1,19 @@
-
+import os
+import sys
+import time
+import json
+import shutil
+import random
+import signal
+import zipfile
+import asyncio
+import subprocess
 
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton
+from pyrogram.types import (
+    InlineKeyboardMarkup, InlineKeyboardButton,
+    Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton
+)
 
 # ================= BOT CONFIG =================
 BOT_TOKEN = "8564976780:AAF7qFJjOJe0SNSigbvaCoj_Df7FrErZzD4"
@@ -23,11 +35,8 @@ logs_store = {}      # user_id -> file_path -> logs
 referral_links = {}  # code -> user_id
 bot_start_time = time.time()
 
-
 # ================= VIP USERS =================
-vip_users = set()  # store VIP user_ids in memory
-
-# Save/load VIP users from JSON
+vip_users = set()
 VIP_FILE = "vip_users.json"
 
 if os.path.exists(VIP_FILE):
@@ -37,7 +46,7 @@ if os.path.exists(VIP_FILE):
 def save_vip():
     with open(VIP_FILE, "w") as f:
         json.dump(list(vip_users), f)
-        
+
 # Load persistent users
 if os.path.exists(DATA_FILE):
     with open(DATA_FILE, "r") as f:
@@ -96,7 +105,7 @@ async def run_script(user_id, file_path):
             line = await proc.stdout.readline()
             if not line:
                 break
-            text = line.decode().strip()
+            text = line.decode(errors="ignore").strip()
             logs_store[user_id][file_path].append(text)
             logs_store[user_id][file_path] = logs_store[user_id][file_path][-50:]
             with open(log_file, "a", encoding="utf-8") as f:
@@ -118,11 +127,12 @@ async def install_requirements(folder):
 
 # ================= SAFE RESTART =================
 def safe_restart():
-    save_data()  # Always save data before restart
+    save_data()
     os.execv(sys.executable, [sys.executable] + sys.argv)
+
 # ================= SIGNAL HANDLER =================
 def handle_exit(sig, frame):
-    save_data()  # Save data on Ctrl+C or Termux exit
+    save_data()
     for uid, procs in active_scripts.items():
         for p in procs.values():
             p.kill()
@@ -133,14 +143,13 @@ signal.signal(signal.SIGTERM, handle_exit)
 
 # ================= START COMMAND =================
 @bot.on_message(filters.command("start") & filters.private)
-async def start(_, m):
+async def start(_, m: Message):
     uid = m.from_user.id
     users.setdefault(uid, {"tier": "FREE", "files": [], "referrals": 0})
     if uid == OWNER_ID:
         users[uid]["tier"] = "OWNER"
     save_data()
 
-    # Handle referral code if present
     if len(m.command) > 1:
         ref_code = m.command[1]
         if ref_code in referral_links:
@@ -154,47 +163,41 @@ async def start(_, m):
                     pass
                 save_data()
 
-    # Build welcome text
     welcome_text = (
-"┏━━━━━━━━━━━━━━━━━━━━━━┓\n"
-"┃   🚀 𝐒𝐄𝐗𝐓𝐘 𝐇𝐎𝐒𝐓𝐈𝐍𝐆   ┃\n"
-"┃      𝐕𝐄𝐑𝐒𝐈𝐎𝐍 3.1     ┃\n"
-"┗━━━━━━━━━━━━━━━━━━━━━━┛\n\n"
-f"👤 𝐖𝐞𝐥𝐜𝐨𝐦𝐞, {m.from_user.first_name}!\n"
-f"🆔 𝐔𝐬𝐞𝐫 𝐈𝐃: {uid}\n"
-f"🎫 𝐓𝐢𝐞𝐫: {users[uid]['tier']}" + (" 🔥 VIP" if uid in vip_users else "") + "\n"
-f"📁 𝐅𝐢𝐥𝐞𝐬: {len(users[uid]['files'])}\n\n"
-f"📊 𝐑𝐞𝐟𝐞𝐫𝐫𝐚𝐥𝐬: {users[uid]['referrals']}\n\n"
-"📢 𝐔𝐩𝐝𝐚𝐭𝐞 𝐂𝐡𝐚𝐧𝐧𝐞𝐥: @SEXTYMODS\n"
-"👥 𝐉𝐨𝐢𝐧 𝐆𝐫𝐨𝐮𝐩: https://t.me/+kxmchJsseDxjYzhl\n\n"
-"⚡ 𝐅𝐞𝐚𝐭𝐮𝐫𝐞𝐬:\n"
-"• 𝐀𝐮𝐭𝐨-𝐑𝐞𝐜𝐨𝐯𝐞𝐫𝐲 𝐒𝐲𝐬𝐭𝐞𝐦\n"
-"• 𝐓𝐢𝐞𝐫-𝐁𝐚𝐬𝐞𝐝 𝐇𝐨𝐬𝐭𝐢𝐧𝐠\n"
-"• 𝐏𝐲𝐭𝐡𝐨𝐧/𝐉𝐒 𝐒𝐮𝐩𝐩𝐨𝐫𝐭\n"
-"• 𝐑𝐞𝐚𝐥-𝐓𝐢𝐦𝐞 𝐌𝐨𝐧𝐢𝐭𝐨𝐫𝐢𝐧𝐠\n\n"
-"𝐔𝐬𝐞 𝐛𝐮𝐭𝐭𝐨𝐧𝐬 𝐛𝐞𝐥𝐨𝐰 𝐭𝐨 𝐧𝐚𝐯𝐢𝐠𝐚𝐭𝐞."
-)
+        "┏━━━━━━━━━━━━━━━━━━━━━━┓\n"
+        "┃   🚀 𝐒𝐄𝐗𝐓𝐘 𝐇𝐎𝐒𝐓𝐈𝐍𝐆   ┃\n"
+        "┃      𝐕𝐄𝐑𝐒𝐈𝐎𝐍 3.1     ┃\n"
+        "┗━━━━━━━━━━━━━━━━━━━━━━┛\n\n"
+        f"👤 𝐖𝐞𝐥𝐜𝐨𝐦𝐞, {m.from_user.first_name}!\n"
+        f"🆔 𝐔𝐬𝐞𝐫 𝐈𝐃: {uid}\n"
+        f"🎫 𝐓𝐢𝐞𝐫: {users[uid]['tier']}" + (" 🔥 VIP" if uid in vip_users else "") + "\n"
+        f"📁 𝐅𝐢𝐥𝐞𝐬: {len(users[uid]['files'])}\n\n"
+        f"📊 𝐑𝐞𝐟𝐞𝐫𝐫𝐚𝐥𝐬: {users[uid]['referrals']}\n\n"
+        "📢 𝐔𝐩𝐝𝐚𝐭𝐞 𝐂𝐡𝐚𝐧𝐧𝐞𝐥: @SEXTYMODS\n"
+        "👥 𝐉𝐨𝐢𝐧 𝐆𝐫𝐨𝐮𝐩: https://t.me/+kxmchJsseDxjYzhl\n\n"
+        "⚡ 𝐅𝐞𝐚𝐭𝐮𝐫𝐞𝐬:\n"
+        "• 𝐀𝐮𝐭𝐨-𝐑𝐞𝐜𝐨𝐯𝐞𝐫𝐲 𝐒𝐲𝐬𝐭𝐞𝐦\n"
+        "• 𝐓𝐢𝐞𝐫-𝐁𝐚𝐬𝐞𝐝 𝐇𝐨𝐬𝐭𝐢𝐧𝐠\n"
+        "• 𝐏𝐲𝐭𝐡𝐨𝐧/𝐉𝐒 𝐒𝐮𝐩𝐩𝐨𝐫𝐭\n"
+        "• 𝐑𝐞𝐚𝐥-𝐓𝐢𝐦𝐞 𝐌𝐨𝐧𝐢𝐭𝐨𝐫𝐢𝐧𝐠\n\n"
+        "𝐔𝐬𝐞 𝐛𝐮𝐭𝐭𝐨𝐧𝐬 𝐛𝐞𝐥𝐨𝐰 𝐭𝐨 𝐧𝐚𝐯𝐢𝐠𝐚𝐭𝐞."
+    )
 
-    # Try to send profile photo if exists
     try:
         photo_id = None
         async for photo in bot.get_chat_photos(uid, limit=1):
-            photo_id = photo.file_id  # Get the first photo's file_id
-            break  # only need one
+            photo_id = photo.file_id
+            break
 
         if photo_id:
-            await bot.send_photo(
-                chat_id=uid,
-                photo=photo_id,
-                caption=welcome_text,
-                reply_markup=control_buttons()
-            )
-            return  # Photo sent, stop here
+            await bot.send_photo(chat_id=uid, photo=photo_id, caption=welcome_text, reply_markup=control_buttons())
+            return
     except Exception as e:
         print("Error fetching profile photo:", e)
 
-    # Fallback: just text if no photo
     await m.reply_text(welcome_text, reply_markup=control_buttons())
+
+
 
 # ================= KEYBOARD HANDLER =================
 @bot.on_message(filters.text & filters.private)
@@ -460,17 +463,8 @@ async def remove_vip(_, m):
         await m.reply_text(f"❌ User {uid_to_remove} removed from VIP successfully!")
     except:
         await m.reply_text("❌ Invalid user ID.")
-# ================= RUN BOT =================
-# ================= AUTO RESUME LAST RUNNING SCRIPTS =================
-# ================= RUN BOT =================
-print("🤖 Hosting Bot Started")  # Render supports basic emoji, but safer without
-
+# ================= MAIN RUN =================
 async def load_and_resume_scripts():
-    """
-    1. Load existing .py files from UPLOAD_DIR into users JSON.
-    2. Set OWNER tier correctly.
-    3. Resume all .py scripts automatically.
-    """
     updated = False
     for uid_str in os.listdir(UPLOAD_DIR):
         folder = os.path.join(UPLOAD_DIR, uid_str)
@@ -487,26 +481,17 @@ async def load_and_resume_scripts():
                     user_data["files"].append(filename)
                     updated = True
                     print(f"Added {filename} to users JSON for user {uid}")
-                # Resume script
                 asyncio.create_task(run_script(uid, path))
                 print(f"Resuming {filename} for user {uid}...")
     if updated:
         save_data()
 
-# ------------------- RUN BOT -------------------
-import asyncio
-
 async def main():
-    # 1️⃣ Resume previous scripts
     await load_and_resume_scripts()
-
-    # 2️⃣ Start the bot
     await bot.start()
     print("Bot is now running...")
-
-    # 3️⃣ Keep bot running
     try:
-        await asyncio.Event().wait()  # infinite wait
+        await asyncio.Event().wait()
     finally:
         await bot.stop()
 
