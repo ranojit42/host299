@@ -494,22 +494,21 @@ async def load_and_resume_scripts():
         save_data()
 
 # ------------------- RUN BOT -------------------
-if __name__ == "__main__":
-    import asyncio
+import asyncio
 
-    # Create new event loop for Python 3.14
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+async def main():
+    # 1️⃣ Resume previous scripts
+    await load_and_resume_scripts()
 
-    # Load and resume scripts
-    loop.run_until_complete(load_and_resume_scripts())
-
-    # Start the bot
-    loop.run_until_complete(bot.start())
+    # 2️⃣ Start the bot
+    await bot.start()
     print("Bot is now running...")
 
+    # 3️⃣ Keep bot running
     try:
-        loop.run_forever()
-    except (KeyboardInterrupt, SystemExit):
-        print("Stopping bot...")
-        loop.run_until_complete(bot.stop())
+        await asyncio.Event().wait()  # infinite wait
+    finally:
+        await bot.stop()
+
+if __name__ == "__main__":
+    asyncio.run(main())
