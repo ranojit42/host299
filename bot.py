@@ -489,14 +489,25 @@ async def load_and_resume_scripts():
         save_data()
 
 import asyncio
+import nest_asyncio
 
+# ================= FIX EVENT LOOP =================
+try:
+    loop = asyncio.get_running_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+nest_asyncio.apply()
+
+# ================= MAIN RUN =================
 async def main():
     await bot.start()
     print("Bot running...")
-    await asyncio.Event().wait()
+    await asyncio.Event().wait()  # Keeps bot running
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        loop.run_until_complete(main())
     except KeyboardInterrupt:
-        asyncio.run(bot.stop())
+        loop.run_until_complete(bot.stop())
