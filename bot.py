@@ -1,12 +1,4 @@
-# ================= CONFIG & AUTO-INSTALL =================
-import subprocess, sys, os, asyncio, time, shutil, random, zipfile, json, signal
 
-# Auto-install dependencies
-for package in ["pyrogram", "tgcrypto"]:
-    try:
-        __import__(package)
-    except ImportError:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", package])
 
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton
