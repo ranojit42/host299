@@ -1,3 +1,5 @@
 pyrogram
 tgcrypto
-nest-asyncio==1.5.6
+flask
+requests
+aiohttp
