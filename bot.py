@@ -471,13 +471,13 @@ async def remove_vip(_, m):
 # ================= RUN BOT =================
 # ================= AUTO RESUME LAST RUNNING SCRIPTS =================
 # ================= RUN BOT =================
-print("🤖 Hosting Bot Started")
+print("🤖 Hosting Bot Started")  # Render supports basic emoji, but safer without
 
 async def load_and_resume_scripts():
     """
-    1️⃣ Load existing .py files from UPLOAD_DIR into users JSON.
-    2️⃣ Set OWNER tier correctly.
-    3️⃣ Resume all .py scripts automatically.
+    1. Load existing .py files from UPLOAD_DIR into users JSON.
+    2. Set OWNER tier correctly.
+    3. Resume all .py scripts automatically.
     """
     updated = False
     for uid_str in os.listdir(UPLOAD_DIR):
@@ -491,20 +491,33 @@ async def load_and_resume_scripts():
         for filename in os.listdir(folder):
             if filename.endswith(".py"):
                 path = os.path.join(folder, filename)
-                # Add to JSON if missing
                 if filename not in user_data["files"]:
                     user_data["files"].append(filename)
                     updated = True
-                    print(f"🟢 Added {filename} to users JSON for user {uid}")
+                    print(f"Added {filename} to users JSON for user {uid}")
                 # Resume script
                 asyncio.create_task(run_script(uid, path))
-                print(f"⚡ Resuming {filename} for user {uid}...")
+                print(f"Resuming {filename} for user {uid}...")
     if updated:
-        save_data()  # Save JSON immediately
+        save_data()
 
-# Run before bot starts
-loop = asyncio.get_event_loop()
-loop.run_until_complete(load_and_resume_scripts())
+# ------------------- RUN BOT -------------------
+if __name__ == "__main__":
+    import asyncio
 
-# Run bot
-bot.run()
+    # Create new event loop for Python 3.14
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    # Load and resume scripts
+    loop.run_until_complete(load_and_resume_scripts())
+
+    # Start the bot
+    loop.run_until_complete(bot.start())
+    print("Bot is now running...")
+
+    try:
+        loop.run_forever()
+    except (KeyboardInterrupt, SystemExit):
+        print("Stopping bot...")
+        loop.run_until_complete(bot.stop())
