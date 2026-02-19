@@ -8,6 +8,8 @@ import signal
 import zipfile
 import asyncio
 import subprocess
+import nest_asyncio
+nest_asyncio.apply()  # <<< ei ta must be top
 
 from pyrogram import Client, filters
 from pyrogram.types import (
@@ -486,14 +488,15 @@ async def load_and_resume_scripts():
     if updated:
         save_data()
 
+import asyncio
+
 async def main():
-    await load_and_resume_scripts()
     await bot.start()
-    print("Bot is now running...")
-    try:
-        await asyncio.Event().wait()
-    finally:
-        await bot.stop()
+    print("Bot running...")
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        asyncio.run(bot.stop())
