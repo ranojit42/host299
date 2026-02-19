@@ -1,6 +1,6 @@
 # ================================
-# Telegram Hosting Bot + Run Uploaded Py Files
-# Python 3.14+ Compatible
+# Telegram Hosting Bot + Flask + Run Uploaded Py Files
+# Python 3.14+ | Render-ready
 # ================================
 
 import os
@@ -16,10 +16,10 @@ from flask import Flask, render_template_string
 # ----------------------
 # CONFIG
 # ----------------------
-API_ID = 38063189  # Replace with your Telegram API ID
-API_HASH = "1f5b2b7bd33615a2a3f34e406dd9ecab"
-BOT_TOKEN = "8321025665:AAH_yqtXQtYVAGuqKlRv4xSQXbSrUefzay0"
-OWNER_ID = 6349871017  # Your Telegram ID
+API_ID = 123456            # Replace with your Telegram API ID
+API_HASH = "your_api_hash_here"
+BOT_TOKEN = "your_bot_token_here"
+OWNER_ID = 123456789       # Your Telegram ID
 
 PACKAGE_FILE = "installed_packages.json"
 RECOMMENDED_PACKAGES = ["requests", "flask", "aiohttp"]
@@ -103,6 +103,7 @@ def home():
     return render_template_string(HTML_TEMPLATE, packages=installed_packages)
 
 def run_flask():
+    # Flask needs its own event loop
     asyncio.set_event_loop(asyncio.new_event_loop())
     flask_app.run(host="0.0.0.0", port=5000)
 
@@ -188,6 +189,13 @@ async def auto_install_packages():
             print(f"Auto-installed {pkg}: {success}")
 
 # ----------------------
+# KEEP BOT ALIVE FOREVER
+# ----------------------
+async def keep_alive():
+    while True:
+        await asyncio.sleep(60)
+
+# ----------------------
 # RUN EVERYTHING
 # ----------------------
 async def main():
@@ -202,8 +210,11 @@ async def main():
     await app_bot.start()
     print("🤖 Telegram Bot running...")
 
-    # Keep running
-    await asyncio.get_event_loop().create_future()
+    # Keep bot alive forever
+    await keep_alive()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Bot stopped manually.")
