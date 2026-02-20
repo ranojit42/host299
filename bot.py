@@ -18,9 +18,7 @@ def auto_install(packages):
             print(f"⚠ Installing {pkg} ...")
             if pkg.lower() == "pytgcalls":
                 subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade",
-                                       "git+https://github.com/pyrogram/tgcalls.git@master"])
-                subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade",
-                                       "git+https://github.com/pytgcalls/pytgcalls.git@master"])
+                                       "pytgcalls==2.1.0"])
             else:
                 subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", pkg])
 
