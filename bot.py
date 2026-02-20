@@ -8,28 +8,7 @@ from youtubesearchpython import VideosSearch
 import yt_dlp
 
 # ================= AUTO-INSTALL FUNCTION =================
-import sys, subprocess
 
-def auto_install(packages):
-    for pkg in packages:
-        try:
-            __import__(pkg.replace("-", "_"))
-        except ImportError:
-            print(f"⚠ Installing {pkg} ...")
-            if pkg.lower() == "pytgcalls":
-                subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade",
-                                       "pytgcalls==2.1.0"])
-            else:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", pkg])
-
-auto_install([
-    "pyrogram",
-    "yt-dlp",
-    "ffmpeg-python",
-    "tgcrypto",
-    "pytgcalls",
-    "youtube-search-python"
-])
 # ================= BOT CONFIG =================
 API_ID = int(os.getenv("API_ID", "38354931"))
 API_HASH = os.getenv("API_HASH", "244144c713cc8da9b582e40f14857216")
