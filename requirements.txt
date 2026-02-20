@@ -1,5 +1,6 @@
-pyrogram
+pyrogram==2.0.106
 tgcrypto
-flask
-requests
-aiohttp
+pytgcalls==2.1.0
+yt-dlp
+youtube-search-python
+ffmpeg-python
