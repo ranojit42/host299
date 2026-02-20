@@ -1,220 +1,126 @@
-# ================================
-# Telegram Hosting Bot + Flask + Run Uploaded Py Files
-# Python 3.14+ | Render-ready
-# ================================
-
-import os
-import subprocess
-import asyncio
-import json
-import threading
-
+# ================= CONFIG & IMPORTS =================
+import sys, subprocess, os, asyncio, time
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from flask import Flask, render_template_string
+from pytgcalls import PyTgCalls
+from pytgcalls.types.input_stream import InputStream, InputAudioStream
+from youtubesearchpython import VideosSearch
+import yt_dlp
 
-# ----------------------
-# CONFIG
-# ----------------------
-API_ID = 123456            # Replace with your Telegram API ID
-API_HASH = "your_api_hash_here"
-BOT_TOKEN = "your_bot_token_here"
-OWNER_ID = 123456789       # Your Telegram ID
+# ================= AUTO-INSTALL FUNCTION =================
+def auto_install(packages):
+    for pkg in packages:
+        try:
+            __import__(pkg.replace("-", "_"))
+        except ImportError:
+            print(f"⚠ Installing {pkg} ...")
+            if pkg.lower() == "pytgcalls":
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "tgcalls==2.0.0"])
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pytgcalls==2.1.0"])
+            else:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", pkg])
 
-PACKAGE_FILE = "installed_packages.json"
-RECOMMENDED_PACKAGES = ["requests", "flask", "aiohttp"]
-UPLOAD_FOLDER = "uploads"
+auto_install([
+    "pyrogram",
+    "yt-dlp",
+    "ffmpeg-python",
+    "tgcrypto",
+    "pytgcalls",
+    "youtube-search-python"
+])
 
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# ================= BOT CONFIG =================
+API_ID = int(os.getenv("API_ID", "38354931"))
+API_HASH = os.getenv("API_HASH", "244144c713cc8da9b582e40f14857216")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8464629559:AAEIV-XPJzJ4JAPTbNUkx5edddwj-CPtZh8")
+OWNER_ID = int(os.getenv("OWNER_ID", "8156670159"))
 
-# ----------------------
-# ENSURE EVENT LOOP EXISTS (Python 3.14+ fix)
-# ----------------------
-try:
-    asyncio.get_running_loop()
-except RuntimeError:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+bot = Client("vc_music_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+vc = PyTgCalls(bot)
 
-# ----------------------
-# INIT BOT
-# ----------------------
-app_bot = Client("HostingBot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+# ================= GLOBALS =================
+queues = {}  # {chat_id: [urls]}
+playing = {} # {chat_id: current_url}
 
-# Load installed packages
-if os.path.exists(PACKAGE_FILE):
-    with open(PACKAGE_FILE, "r") as f:
-        installed_packages = json.load(f)
-else:
-    installed_packages = {}
+# ================= UTILS =================
+async def search_song(query):
+    results = VideosSearch(query, limit=1).result()
+    if results['result']:
+        return results['result'][0]['link']
+    return None
 
-# ----------------------
-# HELPER FUNCTIONS
-# ----------------------
-def save_packages():
-    with open(PACKAGE_FILE, "w") as f:
-        json.dump(installed_packages, f)
-
-async def install_package(package_name: str):
-    try:
-        process = subprocess.run(
-            [os.sys.executable, "-m", "pip", "install", package_name],
-            capture_output=True, text=True
-        )
-        if process.returncode == 0:
-            installed_packages[package_name] = "Installed"
-            save_packages()
-            return True, process.stdout
-        else:
-            return False, process.stderr
-    except Exception as e:
-        return False, str(e)
-
-# ----------------------
-# FLASK WEBSITE
-# ----------------------
-flask_app = Flask(__name__)
-
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Hosting Bot Status</title>
-    <style>
-        body { font-family: Arial; background:#f0f0f0; padding:20px; }
-        h1 { color:#333; }
-        ul { background:#fff; padding:20px; border-radius:10px; }
-        li { margin-bottom:5px; }
-    </style>
-</head>
-<body>
-    <h1>Hosting Bot Status</h1>
-    <ul>
-    {% for pkg, status in packages.items() %}
-        <li>{{ pkg }}: {{ status }}</li>
-    {% endfor %}
-    </ul>
-</body>
-</html>
-"""
-
-@flask_app.route("/")
-def home():
-    return render_template_string(HTML_TEMPLATE, packages=installed_packages)
-
-def run_flask():
-    # Flask needs its own event loop
-    asyncio.set_event_loop(asyncio.new_event_loop())
-    flask_app.run(host="0.0.0.0", port=5000)
-
-# ----------------------
-# TELEGRAM BOT COMMANDS
-# ----------------------
-@app_bot.on_message(filters.command("start"))
-async def start_handler(client, message):
+# ================= COMMANDS =================
+@bot.on_message(filters.command("start"))
+async def start(_, message):
     await message.reply_text(
-        "🚀 Hosting Bot Started!\n\n"
+        "🎵 **VC MUSIC BOT**\n\n"
+        "Use `/song <song name>` to play music in your group VC.\n"
         "Commands:\n"
-        "/install <package> - Install Python package\n"
-        "/packages - List installed packages\n"
-        "/website - Get website URL\n"
-        "📄 Send me a .py file and I will run it automatically!"
+        "`/song <songname>` - play song\n"
+        "`/skip` - skip current\n"
+        "`/stop` - stop playback"
     )
 
-@app_bot.on_message(filters.command("install"))
-async def install_handler(client, message):
-    if message.from_user.id != OWNER_ID:
-        return await message.reply_text("❌ Only owner can install packages.")
-    try:
-        package_name = message.text.split(maxsplit=1)[1]
-    except IndexError:
-        return await message.reply_text("Usage: /install <package>")
+@bot.on_message(filters.command("song") & filters.group)
+async def song(_, message: Message):
+    chat_id = message.chat.id
+    query = " ".join(message.text.split()[1:])
+    if not query:
+        return await message.reply_text("❌ Please provide a song name")
 
-    msg = await message.reply_text(f"⚡ Installing `{package_name}` ...")
-    success, output = await install_package(package_name)
+    url = await search_song(query)
+    if not url:
+        return await message.reply_text("❌ Song not found")
 
-    if success:
-        await msg.edit(f"✅ Package `{package_name}` installed successfully!")
-    else:
-        await msg.edit(f"❌ Failed to install `{package_name}`:\n{output}")
+    if chat_id not in queues:
+        queues[chat_id] = []
+    queues[chat_id].append(url)
+    await message.reply_text(f"✅ Added to queue: {url}")
 
-@app_bot.on_message(filters.command("packages"))
-async def list_packages(client, message):
-    if not installed_packages:
-        return await message.reply_text("No packages installed yet.")
-    msg = "📦 Installed Packages:\n"
-    for pkg, status in installed_packages.items():
-        msg += f"- {pkg}: {status}\n"
-    await message.reply_text(msg)
+    if chat_id not in playing or playing[chat_id] is None:
+        await start_playback(chat_id)
 
-@app_bot.on_message(filters.command("website"))
-async def website_handler(client, message):
-    await message.reply_text("🌐 Website running at `http://<your-ip>:5000`")
+async def start_playback(chat_id):
+    if not queues.get(chat_id):
+        playing[chat_id] = None
+        return
 
-# ----------------------
-# RUN PYTHON FILES SENT TO BOT
-# ----------------------
-@app_bot.on_message(filters.document & filters.document.file_extension(".py"))
-async def handle_py_file(client, message: Message):
-    if message.from_user.id != OWNER_ID:
-        return await message.reply_text("❌ Only owner can send files.")
-    
-    # Save file
-    file_path = os.path.join(UPLOAD_FOLDER, message.document.file_name)
-    await message.document.download(file_path)
-    
-    msg = await message.reply_text(f"⚡ Running `{message.document.file_name}` ...")
-    
-    try:
-        process = subprocess.run(
-            [os.sys.executable, file_path],
-            capture_output=True,
-            text=True,
-            timeout=120  # prevent very long runs
-        )
-        output = process.stdout + process.stderr
-        if len(output) > 4000:
-            output = output[:4000] + "\n...Output truncated..."
-        await msg.edit(f"✅ `{message.document.file_name}` finished!\n\nOutput:\n{output}")
-    except Exception as e:
-        await msg.edit(f"❌ Error running `{message.document.file_name}`:\n{e}")
+    url = queues[chat_id].pop(0)
+    playing[chat_id] = url
+    file_path = f"{chat_id}_{int(time.time())}.mp3"
 
-# ----------------------
-# AUTO INSTALL RECOMMENDED PACKAGES
-# ----------------------
-async def auto_install_packages():
-    for pkg in RECOMMENDED_PACKAGES:
-        if pkg not in installed_packages:
-            success, _ = await install_package(pkg)
-            print(f"Auto-installed {pkg}: {success}")
+    ydl_opts = {"format": "bestaudio/best", "outtmpl": file_path, "quiet": True}
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
 
-# ----------------------
-# KEEP BOT ALIVE FOREVER
-# ----------------------
-async def keep_alive():
-    while True:
-        await asyncio.sleep(60)
+    await vc.join_group_call(chat_id, InputStream(InputAudioStream(file_path)))
+    await asyncio.sleep(1)
+    await asyncio.sleep(5)
 
-# ----------------------
-# RUN EVERYTHING
-# ----------------------
-async def main():
-    # Start Flask website in separate thread
-    threading.Thread(target=run_flask, daemon=True).start()
-    print("🌐 Flask website running on port 5000")
+    if os.path.exists(file_path):
+        os.remove(file_path)
 
-    # Auto-install recommended packages
-    await auto_install_packages()
+    playing[chat_id] = None
+    if queues.get(chat_id):
+        await start_playback(chat_id)
 
-    # Start Telegram bot
-    await app_bot.start()
-    print("🤖 Telegram Bot running...")
+@bot.on_message(filters.command("skip") & filters.group)
+async def skip(_, message):
+    chat_id = message.chat.id
+    await vc.leave_group_call(chat_id)
+    playing[chat_id] = None
+    if queues.get(chat_id):
+        await start_playback(chat_id)
+    await message.reply_text("⏭ Skipped current track")
 
-    # Keep bot alive forever
-    await keep_alive()
+@bot.on_message(filters.command("stop") & filters.group)
+async def stop(_, message):
+    chat_id = message.chat.id
+    await vc.leave_group_call(chat_id)
+    queues[chat_id] = []
+    playing[chat_id] = None
+    await message.reply_text("⏹ Stopped playback and cleared queue")
 
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("Bot stopped manually.")
+# ================= RUN BOT =================
+print("🤖 VC MUSIC BOT STARTED")
+bot.run()
